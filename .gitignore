@@ -4,3 +4,4 @@ data/test_data.ftr
 data/train_data.ftr
 wandb/*
 *.numbers
+catboost_info/*
