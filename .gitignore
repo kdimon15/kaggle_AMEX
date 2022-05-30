@@ -1,4 +1,6 @@
 .DS_Store
-submission_v1.csv
+submission*.csv
 data/test_data.ftr
 data/train_data.ftr
+wandb/*
+*.numbers
