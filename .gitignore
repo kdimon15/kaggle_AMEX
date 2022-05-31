@@ -5,3 +5,6 @@ data/train_data.ftr
 wandb/*
 *.numbers
 catboost_info/*
+models/*
+.gitignore
+__pycache__/*
