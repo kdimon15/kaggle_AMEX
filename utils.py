@@ -20,76 +20,46 @@ from catboost import Pool, CatBoostClassifier
 from sklearn.preprocessing import LabelEncoder
 import catboost
 
-features_avg = ['B_1', 'B_11', 'B_16', 'B_17', 'B_18', 'B_2', 'B_20',
-                'B_28', 'B_3', 'B_4', 'B_5', 'B_7', 'B_9', 'D_112',
-                'D_121', 'D_141', 'D_39', 'D_41', 'D_42', 'D_43',
-                'D_44', 'D_45', 'D_46', 'D_47', 'D_48', 'D_49', 
-                'D_50', 'D_51', 'D_53', 'D_54', 'D_56', 'D_58', 
-                'D_59', 'D_60', 'D_91', 'P_2', 'P_3', 'R_1', 'R_2', 
-                'R_27', 'R_3', 'R_7', 'S_11', 'S_26', 'S_3', 'S_5']
-features_last = ['B_1', 'B_10', 'B_11', 'B_12', 'B_13', 'B_15', 'B_16',
-                 'B_17', 'B_18', 'B_19', 'B_2', 'B_20', 'B_22', 'B_23',
-                 'B_24', 'B_25', 'B_26', 'B_27', 'B_28', 'B_29', 'B_3',
-                 'B_32', 'B_33', 'B_36', 'B_38', 'B_39', 'B_4', 'B_40',
-                 'B_41', 'B_42', 'B_5', 'B_6', 'B_7', 'B_8', 'B_9',
-                 'D_102', 'D_103', 'D_105', 'D_106', 'D_107', 'D_109',
-                 'D_112', 'D_115', 'D_117', 'D_118', 'D_119', 'D_120',
-                 'D_121', 'D_122', 'D_123', 'D_124', 'D_125', 'D_127', 
-                 'D_129', 'D_132', 'D_133', 'D_135', 'D_136', 'D_137', 
-                 'D_140', 'D_141', 'D_143', 'D_145', 'D_39', 'D_41',
-                 'D_42', 'D_43', 'D_44', 'D_45', 'D_46', 'D_47', 'D_48',
-                 'D_49', 'D_50', 'D_51', 'D_52', 'D_53', 'D_54', 'D_55',
-                 'D_56', 'D_58', 'D_59', 'D_60', 'D_61', 'D_62', 'D_63',
-                 'D_64', 'D_66', 'D_70', 'D_72', 'D_73', 'D_74', 'D_75',
-                 'D_76', 'D_77', 'D_78', 'D_79', 'D_80', 'D_82', 'D_83',
-                 'D_84', 'D_86', 'D_91', 'D_92', 'D_93', 'D_94', 'D_96',
-                 'P_2', 'P_3', 'R_1', 'R_10', 'R_11', 'R_12', 'R_13',
-                 'R_14', 'R_15', 'R_17', 'R_18', 'R_19', 'R_2', 'R_20', 
-                 'R_21', 'R_22', 'R_24', 'R_25', 'R_26', 'R_27', 'R_3',
-                 'R_4', 'R_5', 'R_7', 'R_8', 'R_9', 'S_11', 'S_12',
-                 'S_13', 'S_15', 'S_17', 'S_20', 'S_22', 'S_23', 
-                 'S_24', 'S_25', 'S_26', 'S_27', 'S_3', 'S_5', 'S_6',
-                 'S_7', 'S_8', 'S_9']
-cat_features = ['B_30', 'B_38', 'D_114', 'D_116', 'D_117', 'D_120', 'D_126', 'D_63', 'D_64', 'D_66', 'D_68']
+
+def make_num_features(df, num_columns):
+    new_data = df[num_columns+['customer_ID']].groupby('customer_ID').agg(['mean', 'median', 'std', 'min', 'max'])
+    new_data.columns = [f'{x[0]}_{x[1]}' for x in new_data.columns]
+    return new_data
+
 
 def make_categorical_features(df):
-    cat_df = pd.DataFrame([], index=df['customer_ID'].unique())
-    for feature in cat_features:
-        cl_sv = pd.pivot_table(df, index='customer_ID', columns=feature, values = 'P_2', aggfunc = 'count')
-        cl_sv['summs'] = cl_sv.sum(axis=1)
-        for i in cl_sv.columns[:-1]:
-            cl_sv[i] = cl_sv[i] / cl_sv['summs']
-        cl_sv.columns = [feature + '_'+ str(i) + '_count' for i in cl_sv.columns]
-        cat_df = cat_df.merge(cl_sv, how='left', left_index=True, right_index=True)
+    new_data = df.groupby('customer_ID').agg(['nunique'])
+    new_data.columns = [f'{x[0]}_{x[1]}' for x in new_data.columns]
+    return new_data
 
-    nunique_df = df.groupby('customer_ID')[cat_features].nunique()
-    nunique_df.columns = [f'{x}_nunique' for x in nunique_df.columns]
 
-    cat_df = cat_df.merge(nunique_df, how='left', left_index=True, right_index=True).sort_index().fillna(0)
-    del cl_sv
-    return cat_df
+def make_last_features(df, num_cols, cat_cols):
+    cid = df['customer_ID']
+    last = (cid != np.roll(cid, -1))
+    data_last = df.loc[last, num_cols+cat_cols].rename(columns={f: f"{f}_last" for f in num_cols+cat_cols}).set_index(np.asarray(cid[last]))
+    return data_last, [f'{x}_last' for x in cat_cols]
 
 
 def get_data(path, train=False):
     data = pd.read_feather(path)
-    cat_df = make_categorical_features(data)
-    if 'target' in data.columns:
-        main_data = data.drop('target', axis=1).groupby('customer_ID').agg(['mean', 'median', 'std', 'min', 'max']).sort_index()
-    else:
-        main_data = data.groupby('customer_ID').agg(['mean', 'median', 'std', 'min', 'max']).sort_index()
-    main_data.columns = [f'{x[0]}_{x[1]}' for x in main_data.columns]
-    cid = pd.Categorical(data.pop('customer_ID'), ordered=True)
-    last = (cid != np.roll(cid, -1))
-    if train: target = data.loc[last, 'target']
-    df_avg = data[features_avg].groupby(cid).mean().rename(columns={f: f"{f}_avg" for f in features_avg})
-    data = data.loc[last, features_last].rename(columns={f: f"{f}_last" for f in features_last}).set_index(np.asarray(cid[last]))
-    data = pd.concat([data, df_avg, cat_df, main_data], axis=1)
-    cat_features = data.select_dtypes(['category']).columns.tolist()
-    data[cat_features] = data[cat_features].astype('str')
+    data.rename({'S_2': 'date'}, axis=1, inplace=True)
+
+
+    """
+    Не использовалось
+    for col in data.columns:
+        if data[col].dtype=='float16':
+            data[col] = data[col].astype('float32').round(decimals=2).astype('float16')
+    """
+
+    info_columns = ['date', 'target', 'customer_ID']
+    bin_columns = ['D_87', 'B_31']
+    cat_columns = ['B_30', 'B_38', 'D_114', 'D_116', 'D_117', 'D_120', 'D_126', 'D_63', 'D_64', 'D_66', 'D_68']
+    num_columns = sorted([x for x in data.columns if x not in info_columns+bin_columns+cat_columns])
 
     if train:
         encoders = []
-        for feature in cat_features:
+        for feature in cat_columns:
             cat_encoder = LabelEncoder()
             data[feature] = cat_encoder.fit_transform(data[feature])
             encoders.append(cat_encoder)
@@ -98,13 +68,21 @@ def get_data(path, train=False):
     else:
         with open('models/cat_encoder.pkl', 'rb') as f:
             encoders = pickle.load(f)
-        for i in range(len(cat_features)):
-            data[cat_features[i]] = encoders[i].transform(data[cat_features[i]])
-    
+        for i in range(len(cat_columns)):
+            data[cat_columns[i]] = encoders[i].transform(data[cat_columns[i]])
+
+    cat_features = make_categorical_features(data[cat_columns + ['customer_ID']])
+    num_features = make_num_features(data, num_columns)
+    last_features, cat_cols = make_last_features(data, num_columns, cat_columns)
+    all_features = cat_features.merge(num_features, how='left', left_index=True, right_index=True).merge(
+                                        last_features, how='left', left_index=True, right_index=True).sort_index()
+    del cat_features, num_features, last_features
     gc.collect()
 
-    if train: return data, target, cat_features
-    else: return data
+    if train:
+        return all_features, data[['customer_ID', 'target']].drop_duplicates().sort_values('customer_ID')['target'], cat_cols
+    else:
+        return all_features
 
 
 def amex_metric(y_true, y_pred, return_components=False):
