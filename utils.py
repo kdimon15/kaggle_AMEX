@@ -24,6 +24,12 @@ import catboost
 def make_num_features(df, num_columns):
     new_data = df[num_columns+['customer_ID']].groupby('customer_ID').agg(['mean', 'median', 'std', 'min', 'max'])
     new_data.columns = [f'{x[0]}_{x[1]}' for x in new_data.columns]
+
+    add_data = df[df['rank']<=3][num_columns+['customer_ID']].groupby('customer_ID').agg(['mean', 'std'])
+    add_data.columns = [f'last_3_months_{x[0]}_{x[1]}' for x in add_data.columns]
+
+    new_data = new_data.merge(add_data, how='left', left_index=True, right_index=True)
+
     return new_data
 
 
@@ -45,17 +51,19 @@ def get_data(path, train=False):
     data.rename({'S_2': 'date'}, axis=1, inplace=True)
 
 
-    """
-    Не использовалось
+
     for col in data.columns:
         if data[col].dtype=='float16':
             data[col] = data[col].astype('float32').round(decimals=2).astype('float16')
-    """
+
 
     info_columns = ['date', 'target', 'customer_ID']
     bin_columns = ['D_87', 'B_31']
     cat_columns = ['B_30', 'B_38', 'D_114', 'D_116', 'D_117', 'D_120', 'D_126', 'D_63', 'D_64', 'D_66', 'D_68']
     num_columns = sorted([x for x in data.columns if x not in info_columns+bin_columns+cat_columns])
+
+    data['month'] = (data['date'].dt.year - 2017)*12+data['date'].dt.month
+    data['rank'] = data.groupby('customer_ID')['month'].rank(ascending=False)
 
     if train:
         encoders = []
