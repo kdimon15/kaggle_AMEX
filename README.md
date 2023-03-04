@@ -1,1 +1,1 @@
-Решение соревнования [https://github.com/kdimon15/kaggle_AMEX](Afjdkr)
+Решение соревнования [American Express - Default Prediction](https://www.kaggle.com/competitions/amex-default-prediction/overview)
